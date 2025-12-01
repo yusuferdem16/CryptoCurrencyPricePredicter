@@ -1,12 +1,39 @@
 import os
 import joblib
 import numpy as np
-import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from tensorflow.keras.models import load_model
 from src.data_processing import get_processed_data, load_data
+import asyncio
+from contextlib import asynccontextmanager
+import threading
+import schedule
+import time
+from src.automation import daily_job  # Import your job logic
 
+# 1. Define the Scheduler Loop
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+# 2. Start Scheduler on API Startup
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the job
+    schedule.every().day.at("08:00").do(daily_job)
+    print("⏰ Scheduler started within API...")
+    
+    # Run loop in a separate thread so it doesn't block the API
+    thread = threading.Thread(target=run_scheduler, daemon=True)
+    thread.start()
+    
+    yield
+    # (Cleanup code would go here if needed)
+
+# 3. Attach lifespan to App
+app = FastAPI(title="Crypto Forecaster API", version="2.0", lifespan=lifespan)
 app = FastAPI(title="Crypto Forecaster API", version="2.0")
 
 class PredictionResponse(BaseModel):
@@ -72,3 +99,7 @@ def predict(ticker: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
