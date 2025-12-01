@@ -46,10 +46,11 @@ class PredictionResponse(BaseModel):
 
 # --- 3. ENDPOINTS ---
 
-@app.get("/health")
-def health_check():
-    """Keep-Alive Endpoint for UptimeRobot"""
+@app.get("/health", include_in_schema=False)
+@app.head("/health", include_in_schema=False)
+async def health():
     return {"status": "healthy", "scheduler": "running"}
+
 
 @app.get("/predict/{ticker}", response_model=PredictionResponse)
 def predict(ticker: str):
