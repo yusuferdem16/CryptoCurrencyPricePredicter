@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from tensorflow.keras.models import load_model
+from src.feature_engineering import process_data  # <--- NEW IMPORT
 
 # Import our existing pipelines
 from src.database import engine
@@ -136,6 +137,10 @@ def daily_job():
     
     # 1. Ingest New Data
     fetch_and_store(TICKER)
+    
+    # 1.5. Calculate Features (CRITICAL STEP)
+    print("⚙️ Updating Technical Indicators...")
+    process_data(TICKER)  # <--- THIS WAS MISSING
     
     # 2. Verify Yesterday's Prediction
     update_accuracy_metrics()

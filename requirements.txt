@@ -8,6 +8,7 @@ python-dotenv
 requests
 plotly
 streamlit
+matplotlib
 schedule
 joblib
 pmdarima
