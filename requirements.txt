@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pandas
+numpy
+sqlalchemy
+psycopg2-binary
+python-dotenv
+requests
+plotly
+streamlit
+schedule
+joblib
+pmdarima
+scikit-learn
+statsmodels
+# Standard Linux Tensorflow
+tensorflow-cpu
