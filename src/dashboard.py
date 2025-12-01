@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add the root directory to sys.path so Python can find 'src'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import streamlit as st
 import requests
 import os
