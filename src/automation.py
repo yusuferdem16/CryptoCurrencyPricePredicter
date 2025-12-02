@@ -20,12 +20,12 @@ TICKER = "BTC-USD"
 
 def update_accuracy_metrics():
     """
-    Step 2: Check past predictions and fill in the 'Actual' price if available.
+    Step 2: Check past predictions and fill in the 'Actual', 'MAE', and 'MAPE'.
     """
     print("🔍 Verifying past predictions...")
     
     with engine.connect() as conn:
-        # Get pending predictions (where actual_price is missing)
+        # Get pending predictions
         query = text(f"""
             SELECT id, predicted_date, predicted_price 
             FROM predictions 
@@ -37,37 +37,39 @@ def update_accuracy_metrics():
             print("   No pending predictions to verify.")
             return
 
-        # Get latest data to check against
+        # Get latest data
         df_history = load_data(TICKER)
         
-        # FIX: Ensure 'date' column is datetime type
-        # We access the column 'date' directly, not the index
         if 'date' in df_history.columns:
             df_history['date'] = pd.to_datetime(df_history['date'])
         else:
-            # Fallback if 'date' got set as index somewhere else
             df_history = df_history.reset_index()
             df_history['date'] = pd.to_datetime(df_history['date'])
 
         for _, row in pending.iterrows():
             pred_date = pd.to_datetime(row['predicted_date']).date()
             
-            # FIX: Check the 'date' COLUMN
+            # Find the match
             match = df_history[df_history['date'].dt.date == pred_date]
             
             if not match.empty:
                 actual_price = match['close'].values[0]
-                error = abs(actual_price - row['predicted_price'])
                 
-                # Update the DB
+                # --- CALCULATE METRICS ---
+                error_mae = abs(actual_price - row['predicted_price'])
+                error_mape = (error_mae / actual_price) * 100  # <--- NEW CALCULATION
+                
+                # Update DB with BOTH metrics
                 update_query = text(f"""
                     UPDATE predictions 
-                    SET actual_price = {actual_price}, mae = {error}
+                    SET actual_price = {actual_price}, 
+                        mae = {error_mae}, 
+                        mape = {error_mape}
                     WHERE id = {row['id']}
                 """)
                 conn.execute(update_query)
                 conn.commit()
-                print(f"   ✅ Verified Prediction for {pred_date}: Pred=${row['predicted_price']:.2f}, Actual=${actual_price:.2f}, Error=${error:.2f}")
+                print(f"   ✅ Verified {pred_date}: Actual=${actual_price:.2f}, MAE=${error_mae:.2f}, MAPE={error_mape:.2f}%")
 
 def generate_daily_forecast():
     """

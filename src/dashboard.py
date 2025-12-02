@@ -63,11 +63,10 @@ with tab1:
 # --- TAB 2: Accuracy Tracker (NEW!) ---
 with tab2:
     st.header("🔍 Model Performance Ledger")
-    st.markdown("This table tracks every prediction made by the automated system and verifies it against reality the next day.")
     
-    # 1. Fetch Data
+    # 1. Fetch Data (Now including mape)
     query = f"""
-        SELECT predicted_date, model_version, predicted_price, actual_price, mae 
+        SELECT predicted_date, model_version, predicted_price, actual_price, mae, mape 
         FROM predictions 
         WHERE ticker = '{ticker}' 
         ORDER BY predicted_date DESC
@@ -75,48 +74,52 @@ with tab2:
     df_preds = pd.read_sql(query, engine)
     
     if not df_preds.empty:
-        # Format date
         df_preds['predicted_date'] = pd.to_datetime(df_preds['predicted_date']).dt.date
         
-        # FIX 1: Ensure columns are numeric (converts SQL NULL to Pandas NaN)
-        df_preds['actual_price'] = pd.to_numeric(df_preds['actual_price'])
-        df_preds['mae'] = pd.to_numeric(df_preds['mae'])
+        # Ensure numeric types
+        cols = ['actual_price', 'mae', 'mape']
+        for c in cols:
+            df_preds[c] = pd.to_numeric(df_preds[c])
 
-        # FIX 2: Custom formatter that handles missing (NaN) values safely
-        def safe_format(val):
-            return f"${val:,.2f}" if pd.notnull(val) else "⏳ Pending"
+        # Custom formatters
+        def fmt_price(x): return f"${x:,.2f}" if pd.notnull(x) else "⏳ Pending"
+        def fmt_mape(x): return f"{x:.2f}%" if pd.notnull(x) else "—"
 
-        # Apply Styling with the safe formatter
+        # Apply Styling
         st.dataframe(
             df_preds.style.format({
                 "predicted_price": "${:,.2f}",
-                "actual_price": safe_format,
-                "mae": safe_format
-            }).background_gradient(subset=['mae'], cmap='RdYlGn_r', vmin=0, vmax=2000), 
+                "actual_price": fmt_price,
+                "mae": fmt_price,
+                "mape": fmt_mape
+            }).background_gradient(subset=['mape'], cmap='RdYlGn_r', vmin=0, vmax=5), # Green if <5% error
             use_container_width=True
         )
         
         # 2. Scoreboard
         st.subheader("🏆 Overall Scoreboard")
-        
-        # Filter out "Pending" rows before calculating averages
-        df_finished = df_preds.dropna(subset=['mae'])
+        df_finished = df_preds.dropna(subset=['mape'])
         
         if not df_finished.empty:
-            avg_mae = df_finished.groupby('model_version')['mae'].mean().reset_index()
+            avg_metrics = df_finished.groupby('model_version')[['mae', 'mape']].mean().reset_index()
             
             col_a, col_b = st.columns(2)
             
-            # Safe extraction of values
-            lstm_rows = avg_mae[avg_mae['model_version'].str.contains('LSTM')]
-            if not lstm_rows.empty:
-                col_a.metric("LSTM Average MAE", f"${lstm_rows['mae'].values[0]:,.2f}")
+            # LSTM Stats
+            lstm_row = avg_metrics[avg_metrics['model_version'].str.contains('LSTM')]
+            if not lstm_row.empty:
+                mae = lstm_row['mae'].values[0]
+                mape = lstm_row['mape'].values[0]
+                col_a.metric("LSTM Average Error", f"${mae:,.2f}", f"MAPE: {mape:.2f}%", delta_color="inverse")
                 
-            sari_rows = avg_mae[avg_mae['model_version'].str.contains('SARIMAX')]
-            if not sari_rows.empty:
-                col_b.metric("SARIMAX Average MAE", f"${sari_rows['mae'].values[0]:,.2f}")
+            # SARIMAX Stats
+            sari_row = avg_metrics[avg_metrics['model_version'].str.contains('SARIMAX')]
+            if not sari_row.empty:
+                mae = sari_row['mae'].values[0]
+                mape = sari_row['mape'].values[0]
+                col_b.metric("SARIMAX Average Error", f"${mae:,.2f}", f"MAPE: {mape:.2f}%", delta_color="inverse")
         else:
-            st.info("Waiting for tomorrow's close price to calculate first accuracy scores.")
+            st.info("Waiting for data validation to calculate scores.")
             
     else:
-        st.info("No automated predictions recorded yet. Run the 'daily_job' script to start tracking.")
+        st.info("No predictions yet.")
