@@ -112,27 +112,32 @@ def generate_daily_forecast():
     price_lstm = float(current_price * np.exp(lstm_log_return))
     price_sarimax = float(current_price * np.exp(sarimax_log_return))
 
-    # --- Save to DB ---
-    # FIX: Use the date column to find "Tomorrow"
-    # Ensure date is parsed correctly
+    # --- Save to DB (Idempotent Version) ---
     last_date_ts = pd.to_datetime(df_raw['date'].iloc[-1])
     tomorrow = (last_date_ts + timedelta(days=1)).date()
     
     with engine.connect() as conn:
-        # Insert LSTM Forecast
+        # 1. DELETE existing prediction for this date/model (if any)
+        # This ensures we overwrite the old prediction with the fresh one
+        conn.execute(text(f"""
+            DELETE FROM predictions 
+            WHERE ticker = '{TICKER}' 
+            AND predicted_date = '{tomorrow}'
+        """))
+        
+        # 2. INSERT the new one
         conn.execute(text(f"""
             INSERT INTO predictions (timestamp, ticker, model_version, predicted_date, predicted_price)
             VALUES (NOW(), '{TICKER}', 'LSTM_BiDir_v4', '{tomorrow}', {price_lstm})
         """))
         
-        # Insert SARIMAX Forecast
         conn.execute(text(f"""
             INSERT INTO predictions (timestamp, ticker, model_version, predicted_date, predicted_price)
             VALUES (NOW(), '{TICKER}', 'SARIMAX_v1', '{tomorrow}', {price_sarimax})
         """))
         conn.commit()
     
-    print(f"   💾 Saved forecasts for {tomorrow}: LSTM=${price_lstm:.2f}, SARIMAX=${price_sarimax:.2f}")
+    print(f"   💾 Saved forecasts for {tomorrow} (Overwrote previous if existed).")
 
 def daily_job():
     print(f"\n⏰ Waking up! Starting daily cycle for {datetime.now().date()}...")
