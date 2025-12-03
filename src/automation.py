@@ -161,14 +161,10 @@ def daily_job():
     print("💤 Cycle complete. Going back to sleep...")
 
 if __name__ == "__main__":
-    # For testing, run once immediately
-    print("⚡️ Initial Immediate Run...")
+    # GitHub Actions will run this script once and then exit.
+    # We don't need schedule loops or "smart checks" here anymore 
+    # because the CRON trigger in YAML handles the timing perfectly.
+    
+    print("🤖 GitHub Action Triggered: Starting Daily Cycle...")
     daily_job()
-    
-    # Then schedule it for every morning at 08:00
-    schedule.every().day.at("08:00").do(daily_job)
-    
-    print("\n📅 Scheduler is running. Waiting for 08:00 AM...")
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    print("✅ Daily Cycle Finished. Exiting.")
