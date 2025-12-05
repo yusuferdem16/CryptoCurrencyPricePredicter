@@ -93,7 +93,7 @@ def train_sarimax(ticker="BTC-USD"):
     plt.plot(predicted_prices[-100:], label='SARIMAX Forecast', color='green', linestyle='--')
     plt.title(f'SARIMAX Model: Actual vs Predicted (MAE: ${mae:.2f})')
     plt.legend()
-    plt.show()
+    # plt.show()
 
 if __name__ == "__main__":
     train_sarimax("BTC-USD")

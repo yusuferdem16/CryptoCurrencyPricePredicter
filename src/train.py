@@ -63,7 +63,7 @@ def train_model(ticker="BTC-USD"):
     plt.plot(predicted_prices[-100:], label='Predicted Price', color='red', linestyle='--')
     plt.title(f'Sharpshooter Model (Seq={seq_length}): Actual vs Predicted (MAE: ${mae:.2f})')
     plt.legend()
-    plt.show()
+    # plt.show()
 
     print(f"\n✨ FINAL RESULTS ✨")
     print(f"Baseline MAE to beat: $1595.53")
