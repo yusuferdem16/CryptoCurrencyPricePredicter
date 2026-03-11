@@ -11,8 +11,8 @@
 A full-stack, production-grade ML system that forecasts Bitcoin prices using a **live model arena** where **Bi-Directional LSTM** and **SARIMAX** compete daily.  
 The system automates data ingestion, feature engineering, training, evaluation, storage, and prediction serving.
 
-👉 **Live Demo:** *Add your Streamlit link here*  
-👉 **Author:** *Erdem — Final Year Capstone Project / Portfolio Piece*
+👉 **Live Demo:** *https://btcforecaster.streamlit.app/*  
+👉 **Author:** *Abdullah Yusuf Erdem*
 
 ---
 
@@ -214,3 +214,4 @@ This project is licensed under the **MIT License**.
 Final Year Capstone Project | ML Engineering | MLOps | Data Science
 
 Feel free to reach out for discussion, collaboration, or feedback!
+
