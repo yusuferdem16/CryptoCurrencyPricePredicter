@@ -14,12 +14,17 @@ The system automates data ingestion, feature engineering, training, evaluation, 
 
 ---
 
-## 📸 Dashboard Preview  
-- **Model Arena:** Real-time comparison of LSTM vs SARIMAX  
-- **Daily MAE Audit:** Tracks prediction accuracy  
-- **Technical Indicator View:** Log returns, RSI, Bollinger metrics  
+## 📸 Dashboard Preview
 
-(Add your screenshots here.)
+**Live Forecast** — current price, tomorrow's LSTM vs. SARIMAX prediction, and a chart of recent history plus both forecasts:
+
+![Live Forecast tab](docs/screenshots/live_forecast.png)
+
+**Accuracy Tracker** — every past prediction, its actual outcome once known, and running MAE/MAPE per model:
+
+![Accuracy Tracker tab](docs/screenshots/accuracy_tracker.png)
+
+*(Both captured straight off the live pipeline's own output right after its first automated run - not mockups.)*
 
 ---
 
@@ -113,6 +118,8 @@ Nothing in this pipeline needs a network-reachable server: GitHub Actions runs o
 
 Daily crypto forecasting has low signal-to-noise.
 Deep Learning finds patterns, but **statistical baselines remain strong competitors** on daily data.
+
+The table above is a static offline backtest. The **Accuracy Tracker** tab on the [live dashboard](https://btcforecaster.streamlit.app/) is the ongoing, unmediated record - every real-world forecast either model has made, verified against what actually happened the next day, updated automatically every day.
 
 ---
 
