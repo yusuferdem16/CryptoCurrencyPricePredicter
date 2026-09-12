@@ -1,12 +1,11 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from src.database import engine
+from src.storage import read_table
 
 def load_data(ticker):
     table_name = f"features_{ticker.lower().replace('-', '_')}"
-    query = f"SELECT * FROM {table_name} ORDER BY date ASC"
-    df = pd.read_sql(query, engine)
+    df = read_table(table_name).sort_values("date").reset_index(drop=True)
     df.dropna(inplace=True)
     return df
 

@@ -2,10 +2,8 @@
 ### End-to-End Machine Learning System for Daily Bitcoin Price Forecasting
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-Automation-blue)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-red)
-![Docker](https://img.shields.io/badge/Docker-Enabled-blue)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 A full-stack, production-grade ML system that forecasts Bitcoin prices using a **live model arena** where **Bi-Directional LSTM** and **SARIMAX** compete daily.  
@@ -28,18 +26,17 @@ The system automates data ingestion, feature engineering, training, evaluation, 
 ## 🧠 Project Overview
 
 This project goes *far beyond* a Jupyter Notebook.  
-It is a **fully automated MLOps system** that:
+It is a **fully automated, serverless MLOps system** that runs indefinitely for free with zero manual steps:
 
-- Ingests daily real-time Bitcoin price data  
+- Ingests daily real-time Bitcoin price data via GitHub Actions  
 - Engineers stationarity-friendly features  
-- Retrains LSTM + SARIMAX models  
-- Evaluates their performance  
-- Stores model artifacts  
-- Produces next-day price forecasts  
-- Serves them via a REST API  
-- Displays forecasts and metrics on a Streamlit dashboard  
+- Produces next-day price forecasts every day  
+- Retrains LSTM + SARIMAX models on a weekly cadence  
+- Tracks and evaluates prediction accuracy over time  
+- Commits every result straight back to the repo as the system of record  
+- Displays forecasts and metrics on a Streamlit dashboard that auto-redeploys on every update  
 
-Perfect for showcasing **Data Engineering**, **ML Engineering**, and **Full-Stack ML** skills.
+Perfect for showcasing **Data Engineering**, **ML Engineering**, and **MLOps** skills.
 
 ---
 
@@ -52,18 +49,20 @@ Two competing forecasting models:
 
 The system identifies the best daily signal.
 
-### 🤖 Automated MLOps Pipeline  
-Daily scheduler:
-1. Ingest new data  
-2. Validate yesterday’s prediction (MAE)  
-3. Retrain models  
-4. Update model registry  
-5. Generate new forecast  
+### 🤖 Automated MLOps Pipeline
+**Daily** (GitHub Actions cron):
+1. Ingest new data
+2. Validate yesterday's prediction (MAE / MAPE)
+3. Generate tomorrow's forecast
 
-### 🗄️ Robust Data Infrastructure  
-- Dockerized **PostgreSQL** database  
-- No CSV headaches  
-- Persistent, queryable time-series storage  
+**Weekly** (separate GitHub Actions cron):
+4. Retrain both models on the latest history
+5. Overwrite the model artifacts
+
+### 🗄️ File-Based Data Store
+- No database to host, pay for, or lose network access to
+- Price history and predictions live as version-controlled CSV/JSON files under `data/`
+- Every GitHub Actions run commits its output straight back to the repo, which is also what triggers the dashboard to auto-redeploy with fresh numbers
 
 ### 📐 Stationarity Engineering  
 Mitigates ML’s extrapolation issues via:
@@ -73,12 +72,11 @@ Mitigates ML’s extrapolation issues via:
 - Lag Features  
 - Scaling & sequence generation  
 
-### 🧩 Full-Stack Architecture  
-- **Backend:** FastAPI  
-- **Frontend:** Streamlit  
+### 🧩 Architecture  
+- **Automation:** GitHub Actions (daily forecast + weekly retrain, both scheduled cron jobs)  
+- **Frontend:** Streamlit (reads committed files directly - no backend to run)  
 - **Training:** LSTM + SARIMAX  
-- **Storage:** PostgreSQL  
-- **Orchestration:** Python (cron-like automation)  
+- **Storage:** Versioned CSV/JSON files in the repo (`data/`, `models/`)  
 
 ---
 
@@ -86,14 +84,18 @@ Mitigates ML’s extrapolation issues via:
 
 ```mermaid
 flowchart LR
-    A[Yahoo Finance API] -->|Daily Ingest| B(PostgreSQL DB)
-    B -->|Fetch| C{Training Pipeline}
-    C -->|Train LSTM| D[Bi-Directional LSTM]
-    C -->|Train SARIMAX| E[SARIMAX]
-    D & E -->|Save Artifacts| F[Model Registry]
-    F -->|Load| G[FastAPI Backend]
-    G -->|Serve JSON| H[Streamlit Dashboard]
+    A[Yahoo Finance API] -->|Daily Ingest| B[data/*.csv in repo]
+    B -->|Load| C[Bi-LSTM + SARIMAX Inference]
+    C -->|Forecast| D[data/predictions.json]
+    D -->|git commit + push| E[GitHub repo]
+    E -->|weekly cron| F{Retrain Pipeline}
+    F -->|Train LSTM| G[Bi-Directional LSTM]
+    F -->|Train SARIMAX| H[SARIMAX]
+    G & H -->|git commit + push| I[models/*.keras + *.pkl]
+    E -->|auto-redeploy on push| J[Streamlit Dashboard]
 ````
+
+Nothing in this pipeline needs a network-reachable server: GitHub Actions runs on GitHub's own infrastructure (full internet access, unlike a laptop behind NAT/Docker), writes its output as files, and pushes them to the repo. Streamlit Community Cloud auto-redeploys on every push, so the dashboard always reflects the latest committed data with zero manual steps and zero database to keep alive.
 
 ---
 
@@ -118,8 +120,9 @@ Deep Learning finds patterns, but **statistical baselines remain strong competit
 
 ### **Prerequisites**
 
-* Docker Desktop
 * Python 3.10+
+
+No database and no Docker required - everything reads and writes plain files under `data/` and `models/`.
 
 ---
 
@@ -130,13 +133,7 @@ git clone https://github.com/yourusername/CryptoPricePredictor.git
 cd CryptoPricePredictor
 ```
 
-### 2️⃣ Start PostgreSQL (Docker)
-
-```bash
-docker-compose up -d
-```
-
-### 3️⃣ Install Dependencies
+### 2️⃣ Install Dependencies
 
 ```bash
 python -m venv venv
@@ -144,33 +141,20 @@ source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4️⃣ Initialize the Database
+### 3️⃣ Run the Pipeline Locally
 
 ```bash
-python -m src.init_db
+python -m src.automation   # daily job: ingest, verify, forecast
+python -m src.retrain      # weekly job: retrain both models
 ```
 
-### 5️⃣ Run the Automated Pipeline
-
-```bash
-python -m src.automation
-```
+Both commands are idempotent and safe to re-run; they read/write the CSV/JSON files under `data/` and the model artifacts under `models/`.
 
 ---
 
 ## 🚀 Usage
 
-### ▶️ Start the API (Backend)
-
-```bash
-uvicorn src.api:app --reload
-```
-
-Access: **[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)**
-
----
-
-### ▶️ Start the Dashboard (Frontend)
+### ▶️ Start the Dashboard
 
 ```bash
 streamlit run src/dashboard.py
@@ -178,25 +162,46 @@ streamlit run src/dashboard.py
 
 Access: **[http://localhost:8501](http://localhost:8501)**
 
+The dashboard reads `data/*.csv` and `data/predictions.json` directly - it does not call any backend or database.
+
+---
+
+## ⚙️ Automation (Production)
+
+Two GitHub Actions workflows drive the live deployment, no manual steps required:
+
+| Workflow | Schedule | What it does |
+| --- | --- | --- |
+| `.github/workflows/daily_prediction.yml` | Daily, 05:00 UTC | Ingest latest price → verify yesterday's forecast → generate tomorrow's forecast → commit `data/` |
+| `.github/workflows/weekly_retrain.yml` | Weekly, Sunday 06:00 UTC | Retrain LSTM + SARIMAX on latest data → commit `models/` and `data/` |
+
+Both workflows use the default `GITHUB_TOKEN` (with `contents: write` permission declared in the workflow) to push their results back to the repo - **no secrets need to be configured**. Every push to the repo also triggers Streamlit Community Cloud to auto-redeploy the dashboard with the latest data.
+
 ---
 
 ## 📂 Project Structure
 
 ```
 CryptoPricePredictor/
-├── models/                  # Saved .keras and .pkl artifacts
+├── data/                     # Price history + predictions (committed by CI)
+│   ├── raw_btc_usd.csv
+│   ├── features_btc_usd.csv
+│   └── predictions.json
+├── models/                   # Saved .keras and .pkl artifacts (committed by CI)
 ├── src/
-│   ├── api.py               # FastAPI backend
-│   ├── automation.py        # Daily MLOps scheduler
-│   ├── dashboard.py         # Streamlit UI
-│   ├── data_processing.py   # Scaling + sequence generation
-│   ├── database.py          # DB connection
+│   ├── automation.py         # Daily job: ingest, verify, forecast
+│   ├── retrain.py            # Weekly job: retrain both models
+│   ├── dashboard.py          # Streamlit UI (reads data/ directly)
+│   ├── data_processing.py    # Scaling + sequence generation
+│   ├── storage.py            # File-based data store (CSV/JSON)
 │   ├── feature_engineering.py # RSI, MACD, Bollinger
-│   ├── ingestion.py         # Yahoo data fetcher
-│   ├── sarimax_pipeline.py  # SARIMAX trainer
-│   ├── train.py             # LSTM trainer
-│   └── models/              # Model definitions
-├── docker-compose.yml
+│   ├── ingestion.py          # Yahoo data fetcher
+│   ├── sarimax_pipeline.py   # SARIMAX trainer
+│   ├── train.py              # LSTM trainer
+│   └── models/                # Model definitions
+├── .github/workflows/
+│   ├── daily_prediction.yml
+│   └── weekly_retrain.yml
 └── requirements.txt
 ```
 
@@ -214,4 +219,3 @@ This project is licensed under the **MIT License**.
 Final Year Capstone Project | ML Engineering | MLOps | Data Science
 
 Feel free to reach out for discussion, collaboration, or feedback!
-

@@ -5,7 +5,6 @@ import joblib
 import pmdarima as pm
 from src.data_processing import load_data
 from sklearn.metrics import mean_absolute_error
-from src.database import engine
 
 def train_sarimax(ticker="BTC-USD"):
     print(f"📊 Starting SARIMAX Training for {ticker}...")
