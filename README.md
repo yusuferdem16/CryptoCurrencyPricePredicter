@@ -136,8 +136,8 @@ No database and no Docker required - everything reads and writes plain files und
 ### 1️⃣ Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/CryptoPricePredictor.git
-cd CryptoPricePredictor
+git clone https://github.com/yusuferdem16/CryptoCurrencyPricePredicter.git
+cd CryptoCurrencyPricePredicter
 ```
 
 ### 2️⃣ Install Dependencies
@@ -189,23 +189,28 @@ Both workflows use the default `GITHUB_TOKEN` (with `contents: write` permission
 ## 📂 Project Structure
 
 ```
-CryptoPricePredictor/
-├── data/                     # Price history + predictions (committed by CI)
+CryptoCurrencyPricePredicter/
+├── data/                      # Price history + predictions (committed by CI)
 │   ├── raw_btc_usd.csv
 │   ├── features_btc_usd.csv
 │   └── predictions.json
-├── models/                   # Saved .keras and .pkl artifacts (committed by CI)
+├── models/                    # Saved .keras and .pkl artifacts (committed by CI)
+├── docs/screenshots/          # Dashboard screenshots used in this README
 ├── src/
-│   ├── automation.py         # Daily job: ingest, verify, forecast
-│   ├── retrain.py            # Weekly job: retrain both models
-│   ├── dashboard.py          # Streamlit UI (reads data/ directly)
-│   ├── data_processing.py    # Scaling + sequence generation
-│   ├── storage.py            # File-based data store (CSV/JSON)
+│   ├── automation.py          # Daily job: ingest, verify, forecast
+│   ├── retrain.py             # Weekly job: retrain both models
+│   ├── dashboard.py           # Streamlit UI (reads data/ directly)
+│   ├── data_processing.py     # Scaling + sequence generation
+│   ├── storage.py             # File-based data store (CSV/JSON)
 │   ├── feature_engineering.py # RSI, MACD, Bollinger
-│   ├── ingestion.py          # Yahoo data fetcher
-│   ├── sarimax_pipeline.py   # SARIMAX trainer
-│   ├── train.py              # LSTM trainer
+│   ├── ingestion.py           # Yahoo data fetcher
+│   ├── sarimax_pipeline.py    # SARIMAX trainer
+│   ├── train.py               # LSTM trainer
+│   ├── baseline.py            # Naive random-walk baseline for comparison
+│   ├── eda.py                 # Exploratory data analysis
+│   ├── force_run.py           # Manual/local trigger for the daily job
 │   └── models/                # Model definitions
+├── .streamlit/                # Streamlit theme/config
 ├── .github/workflows/
 │   ├── daily_prediction.yml
 │   └── weekly_retrain.yml
