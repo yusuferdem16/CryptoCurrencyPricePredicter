@@ -3,6 +3,5 @@ venv/
 __pycache__/
 .env
 .ipynb_checkpoints/
-postgres_data/
 *.pyc
 .DS_Store
