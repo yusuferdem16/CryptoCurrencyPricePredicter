@@ -4,6 +4,7 @@ import os
 # Add the root directory to sys.path so Python can find 'src'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import matplotlib
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -92,6 +93,8 @@ else:
 
         if predictions:
             df_preds = pd.DataFrame(predictions).sort_values("predicted_date", ascending=False)
+            for col in ["actual_price", "mae", "mape"]:
+                df_preds[col] = pd.to_numeric(df_preds[col], errors="coerce")
 
             def fmt_price(x):
                 return f"${x:,.2f}" if pd.notnull(x) else "⏳ Pending"
@@ -99,15 +102,31 @@ else:
             def fmt_mape(x):
                 return f"{x:.2f}%" if pd.notnull(x) else "—"
 
+            mape_numeric = df_preds["mape"]
+            display_df = df_preds[["predicted_date", "model_version", "predicted_price", "actual_price", "mae", "mape"]].copy()
+            display_df["predicted_price"] = display_df["predicted_price"].map(fmt_price)
+            display_df["actual_price"] = display_df["actual_price"].map(fmt_price)
+            display_df["mae"] = display_df["mae"].map(fmt_price)
+            display_df["mape"] = display_df["mape"].map(fmt_mape)
+
+            # Color the mape column by the original numeric value, manually - avoids
+            # relying on Styler.format()'s na_rep and background_gradient's NaN handling,
+            # neither of which this Streamlit/pandas combo passes through st.dataframe()
+            # correctly (na_rep silently dropped, NaN gmap cells rendered solid black).
+            cmap = matplotlib.colormaps["RdYlGn_r"]
+
+            def mape_color(_col):
+                colors = []
+                for val in mape_numeric:
+                    if pd.isnull(val):
+                        colors.append("")
+                    else:
+                        r, g, b, _ = cmap(min(max(val / 5, 0), 1))
+                        colors.append(f"background-color: rgb({r*255:.0f},{g*255:.0f},{b*255:.0f})")
+                return colors
+
             st.dataframe(
-                df_preds[["predicted_date", "model_version", "predicted_price", "actual_price", "mae", "mape"]]
-                .style.format({
-                    "predicted_price": "${:,.2f}",
-                    "actual_price": fmt_price,
-                    "mae": fmt_price,
-                    "mape": fmt_mape,
-                })
-                .background_gradient(subset=["mape"], cmap="RdYlGn_r", vmin=0, vmax=5),
+                display_df.style.apply(mape_color, subset=["mape"]),
                 use_container_width=True,
             )
 
