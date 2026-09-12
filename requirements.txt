@@ -1,16 +1,9 @@
-fastapi
-uvicorn
 pandas
 numpy
-sqlalchemy
-psycopg2-binary
-python-dotenv
-requests
 plotly
 yfinance
 streamlit
 matplotlib
-schedule
 joblib
 pmdarima
 scikit-learn

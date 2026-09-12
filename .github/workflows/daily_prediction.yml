@@ -7,6 +7,9 @@ on:
   # Allows you to click a button in GitHub to run it manually for testing
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
@@ -14,11 +17,11 @@ jobs:
     steps:
     # 1. Download your code
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # 2. Set up Python
     - name: Set up Python 3.10
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
@@ -29,10 +32,21 @@ jobs:
         pip install -r requirements.txt
 
     # 4. Run the Automation Script
+    # No database or API secrets needed: data lives in data/ and models/,
+    # both committed straight back to the repo below.
     - name: Run Daily Job
       env:
-        # Pass the secret from GitHub to the script
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
         PYTHONPATH: .
       run: |
         python -m src.automation
+
+    # 5. Commit the refreshed data/predictions back to the repo.
+    # The Streamlit Community Cloud app auto-redeploys on every push to this
+    # branch, so this push is what makes the dashboard show today's numbers.
+    - name: Commit updated data
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add data/
+        git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%F)"
+        git push

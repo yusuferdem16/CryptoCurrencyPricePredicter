@@ -2,13 +2,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.tsa.stattools import adfuller
-from src.database import engine
+from src.storage import read_table
 
 def load_data(table_name):
     print(f"Loading data from {table_name}...")
-    query = f"SELECT * FROM {table_name} ORDER BY date ASC"
-    df = pd.read_sql(query, engine)
-    df['date'] = pd.to_datetime(df['date'])
+    df = read_table(table_name).sort_values('date')
     df.set_index('date', inplace=True)
     return df
 

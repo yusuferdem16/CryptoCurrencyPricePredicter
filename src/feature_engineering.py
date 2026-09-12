@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
-from sqlalchemy import text
-from src.database import engine
+from src.storage import read_table, write_table
 
 def calculate_rsi(data, window=14):
     """Relative Strength Index (Momentum Indicator)"""
@@ -42,8 +41,7 @@ def process_data(ticker):
     
     # 1. Load Raw Data
     raw_table = f"raw_{ticker.lower().replace('-', '_')}"
-    query = f"SELECT * FROM {raw_table} ORDER BY date ASC"
-    df = pd.read_sql(query, engine)
+    df = read_table(raw_table).sort_values("date").reset_index(drop=True)
     
     # 2. Add Technical Indicators
     df['rsi'] = calculate_rsi(df)
@@ -81,7 +79,7 @@ def process_data(ticker):
     
     # 5. Save
     feature_table = f"features_{ticker.lower().replace('-', '_')}"
-    df.to_sql(feature_table, engine, index=False, if_exists='replace')
+    write_table(df, feature_table)
     
     print(f"✅ Saved {len(df)} rows. New features: bb_position, volume_log_return, macd_norm, momentum_7d.")
 
