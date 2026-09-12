@@ -1,0 +1,22 @@
+[
+  {
+    "timestamp": "2026-09-12T11:40:19.735746",
+    "ticker": "BTC-USD",
+    "model_version": "LSTM_BiDir_v4",
+    "predicted_date": "2026-09-12",
+    "predicted_price": 77103.98393850494,
+    "actual_price": null,
+    "mae": null,
+    "mape": null
+  },
+  {
+    "timestamp": "2026-09-12T11:40:19.735746",
+    "ticker": "BTC-USD",
+    "model_version": "SARIMAX_v1",
+    "predicted_date": "2026-09-12",
+    "predicted_price": 77354.47493065159,
+    "actual_price": null,
+    "mae": null,
+    "mape": null
+  }
+]
