@@ -24,7 +24,12 @@ def fetch_and_store(ticker):
 
     if last_date:
         print(f"📉 Found data for {ticker} up to {last_date.date()}. Appending new data...")
-        start_date = (last_date + timedelta(days=1)).strftime('%Y-%m-%d')
+        # A narrow start date very close to today routes yfinance through a
+        # crumb/cookie-authenticated request path that has proven unreliable
+        # in CI (ImpersonateError from curl_cffi, download silently empty).
+        # A wider trailing window uses the plain historical endpoint instead,
+        # which works; drop_duplicates() below makes the overlap harmless.
+        start_date = (last_date - timedelta(days=10)).strftime('%Y-%m-%d')
     else:
         print(f"🆕 No data found for {ticker}. Fetching full history...")
         start_date = "2020-01-01"  # Default start
@@ -47,12 +52,13 @@ def fetch_and_store(ticker):
 
         # 4. Merge with existing history (dedupe in case of overlap/reruns)
         existing = read_table(table_name)
+        prior_count = len(existing) if existing is not None else 0
         combined = pd.concat([existing, df_new], ignore_index=True) if existing is not None else df_new
         combined = combined.drop_duplicates(subset="date", keep="last").sort_values("date").reset_index(drop=True)
 
         # 5. Store Data
         write_table(combined, table_name)
-        print(f"✅ Added {len(df_new)} new rows to {table_name} ({len(combined)} rows total).")
+        print(f"✅ Added {len(combined) - prior_count} new rows to {table_name} ({len(combined)} rows total).")
 
     except Exception as e:
         print(f"❌ Error updating {ticker}: {e}")
