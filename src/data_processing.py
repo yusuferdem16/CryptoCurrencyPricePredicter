@@ -6,7 +6,11 @@ from src.storage import read_table
 def load_data(ticker):
     table_name = f"features_{ticker.lower().replace('-', '_')}"
     df = read_table(table_name).sort_values("date").reset_index(drop=True)
-    df.dropna(inplace=True)
+    # Same carve-out as process_data(): the most recent row's target_next_return
+    # is unknowable, not invalid - live inference (automation.py) needs that row
+    # intact to know what "tomorrow" actually is. Callers that train against
+    # target_next_return directly (sarimax_pipeline) drop it explicitly first.
+    df.dropna(subset=[c for c in df.columns if c != 'target_next_return'], inplace=True)
     return df
 
 def create_sequences(data, seq_length=60):

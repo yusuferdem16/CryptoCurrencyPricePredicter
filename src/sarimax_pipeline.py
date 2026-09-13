@@ -13,12 +13,15 @@ def train_sarimax(ticker="BTC-USD"):
     # We use the raw feature dataframe, not the sequence-processed one
     # SARIMAX doesn't need 'sequences' like LSTM, it needs a 2D matrix
     df = load_data(ticker)
-    
-    # 2. Prepare Data
+
     # Target: 'target_next_return'
     # Exogenous Features (The "X" in SARIMAX): RSI, Momentum, etc.
     feature_cols = ['volume_log_return', 'rsi', 'bb_position', 'macd_norm', 'momentum_7d']
     target_col = 'target_next_return'
+
+    # 2. Drop the most recent row if its target is unknown - load_data() keeps
+    # it for live inference, but training/evaluation needs a real target.
+    df = df.dropna(subset=[target_col])
     
     # Train/Test Split (Time-based, same 80/20 ratio)
     split_idx = int(len(df) * 0.8)

@@ -75,7 +75,12 @@ def process_data(ticker):
     df['target_next_return'] = df['log_return'].shift(-1)
     
     # 4. Clean NaN
-    df.dropna(inplace=True)
+    # Keep the most recent row even though target_next_return is unknowable
+    # for it (there's no "next day" yet) - it's exactly the row live inference
+    # needs to forecast tomorrow. Training paths drop it themselves before
+    # fitting anything (sarimax_pipeline explicitly; get_processed_data via
+    # its own shift+dropna on a separately-computed target).
+    df.dropna(subset=[c for c in df.columns if c != 'target_next_return'], inplace=True)
     
     # 5. Save
     feature_table = f"features_{ticker.lower().replace('-', '_')}"
