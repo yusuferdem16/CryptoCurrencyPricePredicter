@@ -3,18 +3,21 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from src.storage import read_table, write_table
 
-BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+COINGECKO_RANGE_URL = "https://api.coingecko.com/api/v3/coins/{id}/market_chart/range"
+
+COINGECKO_IDS = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+}
 
 
 def _table_name(ticker):
     return f"raw_{ticker.lower().replace('-', '_')}"
 
 
-def _binance_symbol(ticker):
-    # "BTC-USD" -> "BTCUSDT": Binance has no native USD spot market, USDT
-    # (a USD-pegged stablecoin) is the standard proxy everyone trades against.
-    base = ticker.split('-')[0]
-    return f"{base}USDT"
+def _coingecko_id(ticker):
+    base = ticker.split('-')[0].upper()
+    return COINGECKO_IDS.get(base, base.lower())
 
 
 def get_latest_date(ticker):
@@ -25,39 +28,30 @@ def get_latest_date(ticker):
     return df["date"].max()
 
 
-def _fetch_klines(symbol, start_ms, end_ms):
-    """Fetches daily candles from Binance's public REST API, paginating past its 1000-candle cap."""
-    rows = []
-    cursor = start_ms
-    while True:
-        resp = requests.get(BINANCE_KLINES_URL, params={
-            "symbol": symbol,
-            "interval": "1d",
-            "startTime": cursor,
-            "endTime": end_ms,
-            "limit": 1000,
-        }, timeout=30)
-        resp.raise_for_status()
-        batch = resp.json()
-        if not batch:
-            break
-        rows.extend(batch)
-        if len(batch) < 1000:
-            break
-        cursor = batch[-1][0] + 1  # next candle's open time, in ms
-    return rows
+def _fetch_market_chart(coin_id, from_ts, to_ts):
+    resp = requests.get(
+        COINGECKO_RANGE_URL.format(id=coin_id),
+        params={"vs_currency": "usd", "from": from_ts, "to": to_ts},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 def fetch_and_store(ticker):
     """
-    Pulls daily OHLCV candles from Binance's public API (no key required).
-    Switched from yfinance after its Yahoo Finance scraping consistently
-    failed from GitHub Actions runners with an ImpersonateError - the crumb
-    fetch behind it appears to be rate-limited/blocked for shared CI IP
-    ranges, which silently produced empty downloads and stalled the pipeline.
+    Pulls daily close/volume from CoinGecko's public API (no key required).
+
+    Two prior data sources both failed from GitHub Actions runners: Yahoo
+    Finance (via yfinance) rejected every crumb/cookie handshake with an
+    ImpersonateError, and Binance's public API returned HTTP 451 (Unavailable
+    For Legal Reasons) - almost certainly its US-persons geo-restriction
+    applied to GitHub's Azure-hosted runner IPs. CoinGecko is a global
+    aggregator with no such regulatory geo-fencing and no bot-detection
+    dance to fail.
     """
     table_name = _table_name(ticker)
-    symbol = _binance_symbol(ticker)
+    coin_id = _coingecko_id(ticker)
 
     last_date = get_latest_date(ticker)
 
@@ -68,29 +62,31 @@ def fetch_and_store(ticker):
         print(f"🆕 No data found for {ticker}. Fetching full history...")
         start_dt = datetime(2020, 1, 1, tzinfo=timezone.utc)
 
-    start_ms = int(start_dt.timestamp() * 1000)
-    end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    from_ts = int(start_dt.timestamp())
+    to_ts = int(datetime.now(timezone.utc).timestamp())
 
     try:
-        klines = _fetch_klines(symbol, start_ms, end_ms)
+        payload = _fetch_market_chart(coin_id, from_ts, to_ts)
+        prices = payload.get("prices", [])
+        volumes = payload.get("total_volumes", [])
 
-        if not klines:
+        if not prices:
             print(f"⚠️ No new data available for {ticker}.")
             return
 
-        df_new = pd.DataFrame(klines, columns=[
-            "open_time", "open", "high", "low", "close", "volume",
-            "close_time", "quote_asset_volume", "num_trades",
-            "taker_buy_base", "taker_buy_quote", "ignore",
-        ])
-        df_new["date"] = pd.to_datetime(df_new["open_time"], unit="ms").dt.normalize()
-        for col in ["open", "high", "low", "close", "volume"]:
-            df_new[col] = df_new[col].astype(float)
-        df_new = df_new[["date", "open", "high", "low", "close", "volume"]]
+        price_df = pd.DataFrame(prices, columns=["ts", "close"])
+        volume_df = pd.DataFrame(volumes, columns=["ts", "volume"])
+        price_df["date"] = pd.to_datetime(price_df["ts"], unit="ms").dt.normalize()
+        volume_df["date"] = pd.to_datetime(volume_df["ts"], unit="ms").dt.normalize()
 
-        # Drop today's still-forming candle - Binance's daily candle for "today"
-        # is incomplete until the day closes at 00:00 UTC, so treating it as a
-        # final close would corrupt the most recent row.
+        # CoinGecko returns hourly (or finer) granularity for short ranges -
+        # collapse to one row per UTC day using that day's last observation.
+        daily_close = price_df.groupby("date")["close"].last()
+        daily_volume = volume_df.groupby("date")["volume"].last()
+        df_new = pd.concat([daily_close, daily_volume], axis=1).reset_index()
+
+        # Drop today's still-forming day - its "last observation so far" is
+        # not a final close and would corrupt the most recent row.
         today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
         df_new = df_new[df_new["date"] < today]
 
@@ -98,8 +94,13 @@ def fetch_and_store(ticker):
             print(f"⚠️ No new data available for {ticker}.")
             return
 
-        # Merge with existing history (dedupe in case of overlap/reruns)
+        # Merge with existing history (dedupe in case of overlap/reruns).
+        # Drop any leftover open/high/low columns from the old yfinance-era
+        # schema - nothing downstream uses them, and CoinGecko doesn't
+        # provide them, so keep the schema consistently date/close/volume.
         existing = read_table(table_name)
+        if existing is not None:
+            existing = existing.drop(columns=["open", "high", "low"], errors="ignore")
         prior_count = len(existing) if existing is not None else 0
         combined = pd.concat([existing, df_new], ignore_index=True) if existing is not None else df_new
         combined = combined.drop_duplicates(subset="date", keep="last").sort_values("date").reset_index(drop=True)
