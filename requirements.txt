@@ -1,12 +1,5 @@
 pandas
 numpy
 plotly
-yfinance
 streamlit
 matplotlib
-joblib
-pmdarima
-scikit-learn
-statsmodels
-# Standard Linux Tensorflow
-tensorflow-cpu

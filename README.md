@@ -145,8 +145,10 @@ cd CryptoCurrencyPricePredicter
 ```bash
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-pipeline.txt   # everything, including model training
 ```
+
+`requirements.txt` alone only covers what the dashboard needs (pandas, plotly, streamlit, matplotlib) - that's deliberate, see [Automation (Production)](#️-automation-production) below. `requirements-pipeline.txt` pulls that in plus the training/inference dependencies (yfinance, scikit-learn, statsmodels, pmdarima, tensorflow-cpu).
 
 ### 3️⃣ Run the Pipeline Locally
 
@@ -182,7 +184,7 @@ Two GitHub Actions workflows drive the live deployment, no manual steps required
 | `.github/workflows/daily_prediction.yml` | Daily, 05:00 UTC | Ingest latest price → verify yesterday's forecast → generate tomorrow's forecast → commit `data/` |
 | `.github/workflows/weekly_retrain.yml` | Weekly, Sunday 06:00 UTC | Retrain LSTM + SARIMAX on latest data → commit `models/` and `data/` |
 
-Both workflows use the default `GITHUB_TOKEN` (with `contents: write` permission declared in the workflow) to push their results back to the repo - **no secrets need to be configured**. Every push to the repo also triggers Streamlit Community Cloud to auto-redeploy the dashboard with the latest data.
+Both workflows use the default `GITHUB_TOKEN` (with `contents: write` permission declared in the workflow) to push their results back to the repo - **no secrets need to be configured**. They install `requirements-pipeline.txt`. Every push to the repo also triggers Streamlit Community Cloud to auto-redeploy the dashboard with the latest data - it installs the root `requirements.txt`, which is deliberately kept to just what the dashboard imports, since Community Cloud's free tier has a 1GB RAM ceiling that installing TensorFlow/pmdarima/statsmodels for an app that never imports them could blow past.
 
 ---
 

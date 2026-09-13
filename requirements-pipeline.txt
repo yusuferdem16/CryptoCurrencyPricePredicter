@@ -1,0 +1,14 @@
+# Extra dependencies for the data/training pipeline (GitHub Actions only).
+# The Streamlit dashboard itself only needs requirements.txt - keeping these
+# out of it matters because Streamlit Community Cloud builds its runtime
+# from the root requirements.txt, and its free tier has a 1GB RAM ceiling
+# that tensorflow-cpu + pmdarima + statsmodels + scikit-learn can blow past
+# for an app that never imports any of them.
+-r requirements.txt
+yfinance
+joblib
+pmdarima
+scikit-learn
+statsmodels
+# Standard Linux Tensorflow
+tensorflow-cpu
