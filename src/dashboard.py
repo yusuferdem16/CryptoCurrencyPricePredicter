@@ -168,9 +168,10 @@ else:
         st.caption("Every forecast either model has made, verified against the actual close once it's known.")
 
         if predictions:
-            df_preds = pd.DataFrame(predictions).sort_values("predicted_date", ascending=False)
+            df_preds = pd.DataFrame(predictions)
             for col in ["actual_price", "mae", "mape"]:
                 df_preds[col] = pd.to_numeric(df_preds[col], errors="coerce")
+            df_preds["predicted_date_dt"] = pd.to_datetime(df_preds["predicted_date"])
 
             def fmt_price(x):
                 return f"${x:,.2f}" if pd.notnull(x) else "⏳ Pending"
@@ -178,15 +179,29 @@ else:
             def fmt_mape(x):
                 return f"{x:.2f}%" if pd.notnull(x) else "—"
 
-            mape_numeric = df_preds["mape"]
-            display_df = df_preds[["timestamp", "predicted_date", "model_version", "predicted_price", "actual_price", "mae", "mape"]].copy()
-            display_df.columns = ["Predicted At", "Target Date", "Model", "Predicted", "Actual", "MAE", "MAPE"]
-            display_df["Predicted At"] = display_df["Predicted At"].map(fmt_timestamp)
-            display_df["Target Date"] = display_df["Target Date"].map(fmt_date)
-            display_df["Predicted"] = display_df["Predicted"].map(fmt_price)
-            display_df["Actual"] = display_df["Actual"].map(fmt_price)
-            display_df["MAE"] = display_df["MAE"].map(fmt_price)
-            display_df["MAPE"] = display_df["MAPE"].map(fmt_mape)
+            # --- Shared filters (apply to both tables below) ---
+            filt_col1, filt_col2 = st.columns([1, 2])
+            with filt_col1:
+                status_filter = st.radio("Status", ["All", "Pending", "Resolved"], horizontal=True)
+            with filt_col2:
+                min_date = df_preds["predicted_date_dt"].min().date()
+                max_date = df_preds["predicted_date_dt"].max().date()
+                date_range = st.date_input(
+                    "Target date range", value=(min_date, max_date),
+                    min_value=min_date, max_value=max_date,
+                )
+
+            filtered = df_preds
+            if status_filter == "Pending":
+                filtered = filtered[filtered["actual_price"].isna()]
+            elif status_filter == "Resolved":
+                filtered = filtered[filtered["actual_price"].notna()]
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start, end = date_range
+                filtered = filtered[
+                    (filtered["predicted_date_dt"].dt.date >= start)
+                    & (filtered["predicted_date_dt"].dt.date <= end)
+                ]
 
             # Color the MAPE column by the original numeric value, manually - avoids
             # relying on Styler.format()'s na_rep and background_gradient's NaN handling,
@@ -194,24 +209,46 @@ else:
             # correctly (na_rep silently dropped, NaN gmap cells rendered solid black).
             cmap = matplotlib.colormaps["RdYlGn_r"]
 
-            def mape_color(_col):
-                colors = []
-                for val in mape_numeric:
-                    if pd.isnull(val):
-                        colors.append("")
-                    else:
-                        r, g, b, _ = cmap(min(max(val / 5, 0), 1))
-                        colors.append(f"background-color: rgb({r*255:.0f},{g*255:.0f},{b*255:.0f})")
-                return colors
+            def render_model_table(df_model, title):
+                st.markdown(f"##### {title}")
+                if df_model.empty:
+                    st.info("No predictions match the current filters.")
+                    return
 
-            st.dataframe(
-                display_df.style.apply(mape_color, subset=["MAPE"]),
-                use_container_width=True,
-                hide_index=True,
-            )
+                df_model = df_model.sort_values("predicted_date", ascending=False)
+                mape_numeric = df_model["mape"]
+                display_df = df_model[["timestamp", "predicted_date", "predicted_price", "actual_price", "mae", "mape"]].copy()
+                display_df.columns = ["Predicted At", "Target Date", "Predicted", "Actual", "MAE", "MAPE"]
+                display_df["Predicted At"] = display_df["Predicted At"].map(fmt_timestamp)
+                display_df["Target Date"] = display_df["Target Date"].map(fmt_date)
+                display_df["Predicted"] = display_df["Predicted"].map(fmt_price)
+                display_df["Actual"] = display_df["Actual"].map(fmt_price)
+                display_df["MAE"] = display_df["MAE"].map(fmt_price)
+                display_df["MAPE"] = display_df["MAPE"].map(fmt_mape)
+
+                def mape_color(_col):
+                    colors = []
+                    for val in mape_numeric:
+                        if pd.isnull(val):
+                            colors.append("")
+                        else:
+                            r, g, b, _ = cmap(min(max(val / 5, 0), 1))
+                            colors.append(f"background-color: rgb({r*255:.0f},{g*255:.0f},{b*255:.0f})")
+                    return colors
+
+                st.dataframe(
+                    display_df.style.apply(mape_color, subset=["MAPE"]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            render_model_table(filtered[filtered["model_version"].str.contains("LSTM")], "🧠 LSTM (Deep Learning)")
+            st.markdown("")
+            render_model_table(filtered[filtered["model_version"].str.contains("SARIMAX")], "📐 SARIMAX (Statistical)")
 
             st.divider()
             st.subheader("🏆 Overall Scoreboard")
+            st.caption("All-time average, independent of the filters above.")
             df_finished = df_preds.dropna(subset=["mape"])
 
             if not df_finished.empty:
