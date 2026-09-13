@@ -5,7 +5,7 @@
 # that tensorflow-cpu + pmdarima + statsmodels + scikit-learn can blow past
 # for an app that never imports any of them.
 -r requirements.txt
-yfinance
+requests
 joblib
 pmdarima
 scikit-learn

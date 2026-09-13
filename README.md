@@ -89,7 +89,7 @@ Mitigates ML’s extrapolation issues via:
 
 ```mermaid
 flowchart LR
-    A[Yahoo Finance API] -->|Daily Ingest| B[data/*.csv in repo]
+    A[Binance Public API] -->|Daily Ingest| B[data/*.csv in repo]
     B -->|Load| C[Bi-LSTM + SARIMAX Inference]
     C -->|Forecast| D[data/predictions.json]
     D -->|git commit + push| E[GitHub repo]
@@ -148,7 +148,7 @@ source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements-pipeline.txt   # everything, including model training
 ```
 
-`requirements.txt` alone only covers what the dashboard needs (pandas, plotly, streamlit, matplotlib) - that's deliberate, see [Automation (Production)](#️-automation-production) below. `requirements-pipeline.txt` pulls that in plus the training/inference dependencies (yfinance, scikit-learn, statsmodels, pmdarima, tensorflow-cpu).
+`requirements.txt` alone only covers what the dashboard needs (pandas, plotly, streamlit, matplotlib) - that's deliberate, see [Automation (Production)](#️-automation-production) below. `requirements-pipeline.txt` pulls that in plus the training/inference dependencies (requests, scikit-learn, statsmodels, pmdarima, tensorflow-cpu).
 
 ### 3️⃣ Run the Pipeline Locally
 
@@ -205,7 +205,7 @@ CryptoCurrencyPricePredicter/
 │   ├── data_processing.py     # Scaling + sequence generation
 │   ├── storage.py             # File-based data store (CSV/JSON)
 │   ├── feature_engineering.py # RSI, MACD, Bollinger
-│   ├── ingestion.py           # Yahoo data fetcher
+│   ├── ingestion.py           # Binance public API data fetcher
 │   ├── sarimax_pipeline.py    # SARIMAX trainer
 │   ├── train.py               # LSTM trainer
 │   ├── baseline.py            # Naive random-walk baseline for comparison
