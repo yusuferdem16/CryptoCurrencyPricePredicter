@@ -55,14 +55,20 @@ Two competing forecasting models:
 The system identifies the best daily signal.
 
 ### 🤖 Automated MLOps Pipeline
+Predictions are only as fresh as the last retrain, so there's no benefit to
+re-predicting daily with the same weights - each retrain forecasts the
+whole week ahead in one shot, and the daily job just verifies outcomes as
+they arrive.
+
 **Daily** (GitHub Actions cron):
 1. Ingest new data
-2. Validate yesterday's prediction (MAE / MAPE)
-3. Generate tomorrow's forecast
+2. Validate any predictions whose target date has now passed (MAE / MAPE)
+3. Top up the forecast horizon if it's run short (a safety net - normally a no-op)
 
 **Weekly** (separate GitHub Actions cron):
 4. Retrain both models on the latest history
 5. Overwrite the model artifacts
+6. Forecast every day until the next retrain, superseding any still-unresolved forecast from the outgoing model
 
 ### 🗄️ File-Based Data Store
 - No database to host, pay for, or lose network access to
@@ -181,8 +187,8 @@ Two GitHub Actions workflows drive the live deployment, no manual steps required
 
 | Workflow | Schedule | What it does |
 | --- | --- | --- |
-| `.github/workflows/daily_prediction.yml` | Daily, 05:00 UTC | Ingest latest price → verify yesterday's forecast → generate tomorrow's forecast → commit `data/` |
-| `.github/workflows/weekly_retrain.yml` | Weekly, Sunday 06:00 UTC | Retrain LSTM + SARIMAX on latest data → commit `models/` and `data/` |
+| `.github/workflows/daily_prediction.yml` | Daily, 05:00 UTC | Ingest latest price → verify any now-resolvable forecasts → top up the forecast horizon if needed → commit `data/` |
+| `.github/workflows/weekly_retrain.yml` | Weekly, Sunday 06:00 UTC | Retrain LSTM + SARIMAX → forecast the whole week ahead in one pass → commit `models/` and `data/` |
 
 Both workflows use the default `GITHUB_TOKEN` (with `contents: write` permission declared in the workflow) to push their results back to the repo - **no secrets need to be configured**. They install `requirements-pipeline.txt`. Every push to the repo also triggers Streamlit Community Cloud to auto-redeploy the dashboard with the latest data - it installs the root `requirements.txt`, which is deliberately kept to just what the dashboard imports, since Community Cloud's free tier has a 1GB RAM ceiling that installing TensorFlow/pmdarima/statsmodels for an app that never imports them could blow past.
 
@@ -199,8 +205,9 @@ CryptoCurrencyPricePredicter/
 ├── models/                    # Saved .keras and .pkl artifacts (committed by CI)
 ├── docs/screenshots/          # Dashboard screenshots used in this README
 ├── src/
-│   ├── automation.py          # Daily job: ingest, verify, forecast
-│   ├── retrain.py             # Weekly job: retrain both models
+│   ├── automation.py          # Daily job: ingest, verify, top up forecasts
+│   ├── retrain.py             # Weekly job: retrain both models, forecast the week ahead
+│   ├── forecasting.py         # Multi-day recursive forecast generation (shared)
 │   ├── dashboard.py           # Streamlit UI (reads data/ directly)
 │   ├── data_processing.py     # Scaling + sequence generation
 │   ├── storage.py             # File-based data store (CSV/JSON)
