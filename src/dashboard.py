@@ -12,6 +12,16 @@ from src.storage import read_table, load_predictions
 
 REPO_URL = "https://github.com/yusuferdem16/CryptoCurrencyPricePredicter"
 
+
+def fmt_date(date_str):
+    """A predicted_date value ('2026-09-13') -> 'Sep 13, 2026' - the day being forecast."""
+    return pd.to_datetime(date_str).strftime("%b %d, %Y")
+
+
+def fmt_timestamp(ts_str):
+    """A timestamp value (UTC, no offset) -> 'Sep 13, 2026 - 11:19 UTC' - when the forecast was made."""
+    return pd.to_datetime(ts_str).strftime("%b %d, %Y - %H:%M UTC")
+
 st.set_page_config(page_title="Crypto Sharpshooter", page_icon="⚡", layout="wide")
 
 # --- Sidebar ---
@@ -65,7 +75,10 @@ else:
 
     # --- TAB 1: The Live Forecast ---
     with tab1:
-        st.subheader("Tomorrow's Forecast")
+        if lstm_pred:
+            st.subheader(f"🔮 Forecast for {fmt_date(lstm_pred['predicted_date'])}")
+        else:
+            st.subheader("🔮 Forecast")
 
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -90,8 +103,9 @@ else:
 
         if lstm_pred and sarimax_pred:
             st.caption(
-                f"Forecast generated {lstm_pred['timestamp']} UTC for {lstm_pred['predicted_date']}. "
-                "Refreshed automatically once a day by GitHub Actions."
+                f"📅 Predicting the close for **{fmt_date(lstm_pred['predicted_date'])}** · "
+                f"🕒 generated **{fmt_timestamp(lstm_pred['timestamp'])}** · "
+                "refreshed automatically once a day by GitHub Actions."
             )
 
             st.divider()
@@ -143,8 +157,10 @@ else:
                 return f"{x:.2f}%" if pd.notnull(x) else "—"
 
             mape_numeric = df_preds["mape"]
-            display_df = df_preds[["predicted_date", "model_version", "predicted_price", "actual_price", "mae", "mape"]].copy()
-            display_df.columns = ["Date", "Model", "Predicted", "Actual", "MAE", "MAPE"]
+            display_df = df_preds[["timestamp", "predicted_date", "model_version", "predicted_price", "actual_price", "mae", "mape"]].copy()
+            display_df.columns = ["Predicted At", "Target Date", "Model", "Predicted", "Actual", "MAE", "MAPE"]
+            display_df["Predicted At"] = display_df["Predicted At"].map(fmt_timestamp)
+            display_df["Target Date"] = display_df["Target Date"].map(fmt_date)
             display_df["Predicted"] = display_df["Predicted"].map(fmt_price)
             display_df["Actual"] = display_df["Actual"].map(fmt_price)
             display_df["MAE"] = display_df["MAE"].map(fmt_price)
