@@ -1,6 +1,6 @@
 [
   {
-    "timestamp": "2026-09-12T11:40:19.735746",
+    "timestamp": "2026-09-13T06:08:28.382696",
     "ticker": "BTC-USD",
     "model_version": "LSTM_BiDir_v4",
     "predicted_date": "2026-09-12",
@@ -10,7 +10,7 @@
     "mape": null
   },
   {
-    "timestamp": "2026-09-12T11:40:19.735746",
+    "timestamp": "2026-09-13T06:08:28.382696",
     "ticker": "BTC-USD",
     "model_version": "SARIMAX_v1",
     "predicted_date": "2026-09-12",
