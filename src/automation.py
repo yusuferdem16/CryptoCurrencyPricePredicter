@@ -1,15 +1,19 @@
 import pandas as pd
-from datetime import datetime
+import numpy as np
+import joblib
+import os
+from datetime import datetime, timedelta
+from tensorflow.keras.models import load_model
 from src.feature_engineering import process_data
 
 # Import our existing pipelines
 from src.storage import load_predictions, save_predictions
 from src.ingestion import fetch_and_store
-from src.data_processing import load_data
-from src.forecasting import generate_forecasts
+from src.data_processing import get_processed_data, load_data
+from src.train import train_model as train_lstm
+from src.sarimax_pipeline import train_sarimax
 
 TICKER = "BTC-USD"
-HORIZON_DAYS = 7  # matches the weekly retrain cadence - see src/forecasting.py
 
 
 def update_accuracy_metrics():
@@ -58,14 +62,91 @@ def update_accuracy_metrics():
         save_predictions(records)
 
 
+def generate_daily_forecast():
+    """
+    Make a NEW prediction for tomorrow with the just-retrained models and
+    save it. Always a genuine one-step-ahead prediction from a model
+    trained on data through today - no recursive multi-day chaining, so no
+    compounding error across a horizon.
+    """
+    print("🔮 Generating new forecast for tomorrow...")
+
+    # --- Load Models ---
+    lstm_path = f"models/{TICKER.lower()}_gru_v4.keras"
+    sarimax_path = f"models/{TICKER.lower()}_sarimax.pkl"
+
+    if not os.path.exists(lstm_path) or not os.path.exists(sarimax_path):
+        print("   ⚠️ Models not found. Skipping forecast.")
+        return
+
+    lstm_model = load_model(lstm_path)
+    sarimax_model = joblib.load(sarimax_path)
+
+    # --- Prepare Data ---
+    # 1. LSTM Input (Last 30 days sequences)
+    data_lstm = get_processed_data(TICKER, seq_length=30)
+    X_input = data_lstm['X_test'][-1:]
+
+    # 2. SARIMAX Input (Last row features)
+    df_raw = load_data(TICKER)
+    feature_cols = ['volume_log_return', 'rsi', 'bb_position', 'macd_norm', 'momentum_7d']
+    X_sarimax = df_raw.iloc[-1:][feature_cols]
+
+    # --- Predict ---
+    # LSTM
+    pred_scaled = lstm_model.predict(X_input)
+    target_scaler = data_lstm['target_scaler']
+    lstm_log_return = target_scaler.inverse_transform(pred_scaled)[0][0]
+
+    # SARIMAX
+    sarimax_log_return = sarimax_model.predict(n_periods=1, X=X_sarimax).iloc[0]
+
+    # Convert to Price
+    current_price = df_raw['close'].iloc[-1]
+    price_lstm = float(current_price * np.exp(lstm_log_return))
+    price_sarimax = float(current_price * np.exp(sarimax_log_return))
+
+    # --- Save Forecast (Idempotent) ---
+    last_date_ts = pd.to_datetime(df_raw['date'].iloc[-1])
+    tomorrow = (last_date_ts + timedelta(days=1)).date().isoformat()
+
+    records = load_predictions()
+    # Drop any existing prediction for this ticker/date so we overwrite with the fresh one
+    records = [r for r in records if not (r['ticker'] == TICKER and r['predicted_date'] == tomorrow)]
+
+    now = datetime.utcnow().isoformat()
+    records.append({
+        "timestamp": now,
+        "ticker": TICKER,
+        "model_version": "LSTM_BiDir_v4",
+        "predicted_date": tomorrow,
+        "predicted_price": price_lstm,
+        "actual_price": None,
+        "mae": None,
+        "mape": None,
+    })
+    records.append({
+        "timestamp": now,
+        "ticker": TICKER,
+        "model_version": "SARIMAX_v1",
+        "predicted_date": tomorrow,
+        "predicted_price": price_sarimax,
+        "actual_price": None,
+        "mae": None,
+        "mape": None,
+    })
+
+    save_predictions(records)
+    print(f"   💾 Saved forecasts for {tomorrow} (Overwrote previous if existed).")
+
+
 def daily_job():
     """
-    Runs once a day: fresh data in, verify past guesses, top up the forecast
-    horizon if needed. Model retraining is intentionally NOT part of this
-    job - see src/retrain.py, which runs on its own weekly schedule and is
-    also what actually generates each week's forecasts. Calling
-    generate_forecasts() here is a safety net (first-ever run, or a missed
-    retrain) - most days it's a no-op since the horizon is already filled.
+    Runs once a day: fresh data in, verify yesterday's guess, retrain both
+    models on the updated history, forecast tomorrow. Retraining daily
+    (rather than on a separate weekly cadence) means every forecast comes
+    from a model that has already seen today's close - a plain one-step-
+    ahead prediction, never a multi-day recursive rollout.
     """
     print(f"\n⏰ Waking up! Starting daily cycle for {datetime.now().date()}...")
 
@@ -76,11 +157,17 @@ def daily_job():
     print("⚙️ Updating Technical Indicators...")
     process_data(TICKER)
 
-    # 2. Verify Past Predictions
+    # 2. Verify Yesterday's Prediction
     update_accuracy_metrics()
 
-    # 3. Top Up the Forecast Horizon
-    generate_forecasts(TICKER, horizon_days=HORIZON_DAYS)
+    # 3. Retrain Both Models On The Latest History
+    print("🧠 Retraining Bi-LSTM...")
+    train_lstm(TICKER)
+    print("📊 Retraining SARIMAX...")
+    train_sarimax(TICKER)
+
+    # 4. Predict Tomorrow
+    generate_daily_forecast()
 
     print("💤 Cycle complete. Going back to sleep...")
 

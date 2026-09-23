@@ -63,19 +63,16 @@ else:
     current_price = float(history_df["close"].iloc[-1])
     last_date = pd.to_datetime(history_df["date"].iloc[-1])
 
-    # Nearest not-yet-resolved forecast per model - the most immediately
-    # actionable one, since it's only a single step from real data (models
-    # now predict a whole week ahead at once; see src/forecasting.py).
-    pending_by_model = {}
+    # Most recent forecast (highest predicted_date) per model - each daily
+    # retrain predicts just tomorrow, so there's normally exactly one.
+    latest_by_model = {}
     for rec in predictions:
-        if rec.get("actual_price") is not None:
-            continue
         model = rec["model_version"]
-        if model not in pending_by_model or rec["predicted_date"] < pending_by_model[model]["predicted_date"]:
-            pending_by_model[model] = rec
+        if model not in latest_by_model or rec["predicted_date"] > latest_by_model[model]["predicted_date"]:
+            latest_by_model[model] = rec
 
-    lstm_pred = next((r for m, r in pending_by_model.items() if "LSTM" in m), None)
-    sarimax_pred = next((r for m, r in pending_by_model.items() if "SARIMAX" in m), None)
+    lstm_pred = next((r for m, r in latest_by_model.items() if "LSTM" in m), None)
+    sarimax_pred = next((r for m, r in latest_by_model.items() if "SARIMAX" in m), None)
 
     # --- TAB 1: The Live Forecast ---
     with tab1:
@@ -106,23 +103,8 @@ else:
                     st.metric("📐 SARIMAX (Statistical)", "—")
 
         if lstm_pred and sarimax_pred:
-            # Full pending trajectory per model, not just the nearest day -
-            # each retrain seeds a whole week of forecasts at once now.
-            lstm_future = sorted(
-                (r for r in predictions if r["model_version"] == lstm_pred["model_version"] and r.get("actual_price") is None),
-                key=lambda r: r["predicted_date"],
-            )
-            sarimax_future = sorted(
-                (r for r in predictions if r["model_version"] == sarimax_pred["model_version"] and r.get("actual_price") is None),
-                key=lambda r: r["predicted_date"],
-            )
-
-            horizon_note = (
-                f" ({len(lstm_future)} days already forecast, through {fmt_date(lstm_future[-1]['predicted_date'])})"
-                if len(lstm_future) > 1 else ""
-            )
             st.caption(
-                f"📅 Nearest forecast: **{fmt_date(lstm_pred['predicted_date'])}**{horizon_note} · "
+                f"📅 Predicting the close for **{fmt_date(lstm_pred['predicted_date'])}** · "
                 f"🕒 generated **{fmt_timestamp(lstm_pred['timestamp'])}** · "
                 "refreshed automatically once a day by GitHub Actions."
             )
@@ -131,10 +113,7 @@ else:
             st.subheader("📉 Forecast Visualization")
             recent_history = history_df.tail(60)
 
-            lstm_x = [last_date] + [pd.to_datetime(r["predicted_date"]) for r in lstm_future]
-            lstm_y = [current_price] + [r["predicted_price"] for r in lstm_future]
-            sarimax_x = [last_date] + [pd.to_datetime(r["predicted_date"]) for r in sarimax_future]
-            sarimax_y = [current_price] + [r["predicted_price"] for r in sarimax_future]
+            next_date = pd.to_datetime(lstm_pred["predicted_date"])
 
             fig = go.Figure()
             fig.add_trace(go.Scatter(
@@ -142,11 +121,11 @@ else:
                 name="History", line=dict(color="#94A3B8", width=2),
             ))
             fig.add_trace(go.Scatter(
-                x=lstm_x, y=lstm_y,
+                x=[last_date, next_date], y=[current_price, lstm_pred["predicted_price"]],
                 mode="lines+markers", name="LSTM", line=dict(color="#FF4B4B", width=3),
             ))
             fig.add_trace(go.Scatter(
-                x=sarimax_x, y=sarimax_y,
+                x=[last_date, next_date], y=[current_price, sarimax_pred["predicted_price"]],
                 mode="lines+markers", name="SARIMAX", line=dict(color="#2563EB", width=3, dash="dot"),
             ))
             fig.update_layout(

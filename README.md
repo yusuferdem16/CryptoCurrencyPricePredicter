@@ -35,8 +35,8 @@ It is a **fully automated, serverless MLOps system** that runs indefinitely for 
 
 - Ingests daily real-time Bitcoin price data via GitHub Actions  
 - Engineers stationarity-friendly features  
-- Produces next-day price forecasts every day  
-- Retrains LSTM + SARIMAX models on a weekly cadence  
+- Retrains LSTM + SARIMAX on the updated history every day  
+- Produces a fresh next-day price forecast every day, from that day's model  
 - Tracks and evaluates prediction accuracy over time  
 - Commits every result straight back to the repo as the system of record  
 - Displays forecasts and metrics on a Streamlit dashboard that auto-redeploys on every update  
@@ -55,20 +55,16 @@ Two competing forecasting models:
 The system identifies the best daily signal.
 
 ### 🤖 Automated MLOps Pipeline
-Predictions are only as fresh as the last retrain, so there's no benefit to
-re-predicting daily with the same weights - each retrain forecasts the
-whole week ahead in one shot, and the daily job just verifies outcomes as
-they arrive.
-
-**Daily** (GitHub Actions cron):
+One GitHub Actions cron, once a day:
 1. Ingest new data
-2. Validate any predictions whose target date has now passed (MAE / MAPE)
-3. Top up the forecast horizon if it's run short (a safety net - normally a no-op)
+2. Validate yesterday's forecast now that the actual close is known (MAE / MAPE)
+3. Retrain both models on the updated history
+4. Overwrite the model artifacts
+5. Forecast tomorrow's close with the freshly retrained model
 
-**Weekly** (separate GitHub Actions cron):
-4. Retrain both models on the latest history
-5. Overwrite the model artifacts
-6. Forecast every day until the next retrain, superseding any still-unresolved forecast from the outgoing model
+Retraining daily means every forecast is a plain one-step-ahead prediction
+from a model that has already seen today's close - never a multi-day
+recursive rollout, so error doesn't compound across a horizon.
 
 ### 🗄️ File-Based Data Store
 - No database to host, pay for, or lose network access to
@@ -84,7 +80,7 @@ Mitigates ML’s extrapolation issues via:
 - Scaling & sequence generation  
 
 ### 🧩 Architecture  
-- **Automation:** GitHub Actions (daily forecast + weekly retrain, both scheduled cron jobs)  
+- **Automation:** GitHub Actions (one daily scheduled cron: ingest, retrain, forecast)  
 - **Frontend:** Streamlit (reads committed files directly - no backend to run)  
 - **Training:** LSTM + SARIMAX  
 - **Storage:** Versioned CSV/JSON files in the repo (`data/`, `models/`)  
@@ -95,13 +91,13 @@ Mitigates ML’s extrapolation issues via:
 
 ```mermaid
 flowchart LR
-    A[Binance Public API] -->|Daily Ingest| B[data/*.csv in repo]
-    B -->|Load| C[Bi-LSTM + SARIMAX Inference]
-    C -->|Forecast| D[data/predictions.json]
-    D -->|git commit + push| E[GitHub repo]
-    E -->|weekly cron| F{Retrain Pipeline}
+    A[CoinGecko Public API] -->|Daily Ingest| B[data/*.csv in repo]
+    B -->|Daily Retrain| F{Retrain Pipeline}
     F -->|Train LSTM| G[Bi-Directional LSTM]
     F -->|Train SARIMAX| H[SARIMAX]
+    G & H -->|Load| C[Bi-LSTM + SARIMAX Inference]
+    C -->|Forecast Tomorrow| D[data/predictions.json]
+    D -->|git commit + push| E[GitHub repo]
     G & H -->|git commit + push| I[models/*.keras + *.pkl]
     E -->|auto-redeploy on push| J[Streamlit Dashboard]
 ````
@@ -159,11 +155,10 @@ pip install -r requirements-pipeline.txt   # everything, including model trainin
 ### 3️⃣ Run the Pipeline Locally
 
 ```bash
-python -m src.automation   # daily job: ingest, verify, forecast
-python -m src.retrain      # weekly job: retrain both models
+python -m src.automation   # daily job: ingest, verify, retrain, forecast tomorrow
 ```
 
-Both commands are idempotent and safe to re-run; they read/write the CSV/JSON files under `data/` and the model artifacts under `models/`.
+This command is idempotent and safe to re-run; it reads/writes the CSV/JSON files under `data/` and the model artifacts under `models/`.
 
 ---
 
@@ -183,14 +178,13 @@ The dashboard reads `data/*.csv` and `data/predictions.json` directly - it does 
 
 ## ⚙️ Automation (Production)
 
-Two GitHub Actions workflows drive the live deployment, no manual steps required:
+One GitHub Actions workflow drives the live deployment, no manual steps required:
 
 | Workflow | Schedule | What it does |
 | --- | --- | --- |
-| `.github/workflows/daily_prediction.yml` | Daily, 05:00 UTC | Ingest latest price → verify any now-resolvable forecasts → top up the forecast horizon if needed → commit `data/` |
-| `.github/workflows/weekly_retrain.yml` | Weekly, Sunday 06:00 UTC | Retrain LSTM + SARIMAX → forecast the whole week ahead in one pass → commit `models/` and `data/` |
+| `.github/workflows/daily_prediction.yml` | Daily, 05:00 UTC | Ingest latest price → verify yesterday's forecast → retrain LSTM + SARIMAX on the updated history → forecast tomorrow → commit `data/` and `models/` |
 
-Both workflows use the default `GITHUB_TOKEN` (with `contents: write` permission declared in the workflow) to push their results back to the repo - **no secrets need to be configured**. They install `requirements-pipeline.txt`. Every push to the repo also triggers Streamlit Community Cloud to auto-redeploy the dashboard with the latest data - it installs the root `requirements.txt`, which is deliberately kept to just what the dashboard imports, since Community Cloud's free tier has a 1GB RAM ceiling that installing TensorFlow/pmdarima/statsmodels for an app that never imports them could blow past.
+The workflow uses the default `GITHUB_TOKEN` (with `contents: write` permission declared in the workflow) to push its results back to the repo - **no secrets need to be configured**. It installs `requirements-pipeline.txt`. Every push to the repo also triggers Streamlit Community Cloud to auto-redeploy the dashboard with the latest data - it installs the root `requirements.txt`, which is deliberately kept to just what the dashboard imports, since Community Cloud's free tier has a 1GB RAM ceiling that installing TensorFlow/pmdarima/statsmodels for an app that never imports them could blow past.
 
 ---
 
@@ -205,14 +199,12 @@ CryptoCurrencyPricePredicter/
 ├── models/                    # Saved .keras and .pkl artifacts (committed by CI)
 ├── docs/screenshots/          # Dashboard screenshots used in this README
 ├── src/
-│   ├── automation.py          # Daily job: ingest, verify, top up forecasts
-│   ├── retrain.py             # Weekly job: retrain both models, forecast the week ahead
-│   ├── forecasting.py         # Multi-day recursive forecast generation (shared)
+│   ├── automation.py          # Daily job: ingest, verify, retrain both models, forecast tomorrow
 │   ├── dashboard.py           # Streamlit UI (reads data/ directly)
 │   ├── data_processing.py     # Scaling + sequence generation
 │   ├── storage.py             # File-based data store (CSV/JSON)
 │   ├── feature_engineering.py # RSI, MACD, Bollinger
-│   ├── ingestion.py           # Binance public API data fetcher
+│   ├── ingestion.py           # CoinGecko public API data fetcher
 │   ├── sarimax_pipeline.py    # SARIMAX trainer
 │   ├── train.py               # LSTM trainer
 │   ├── baseline.py            # Naive random-walk baseline for comparison
@@ -221,8 +213,7 @@ CryptoCurrencyPricePredicter/
 │   └── models/                # Model definitions
 ├── .streamlit/                # Streamlit theme/config
 ├── .github/workflows/
-│   ├── daily_prediction.yml
-│   └── weekly_retrain.yml
+│   └── daily_prediction.yml
 └── requirements.txt
 ```
 

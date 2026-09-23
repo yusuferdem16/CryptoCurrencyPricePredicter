@@ -1,4 +1,4 @@
-name: Daily Crypto Forecast
+name: Daily Retrain & Forecast
 
 on:
   schedule:
@@ -32,6 +32,8 @@ jobs:
         pip install -r requirements-pipeline.txt
 
     # 4. Run the Automation Script
+    # Ingests fresh data, verifies yesterday's forecasts, retrains both
+    # models on the updated history, and predicts tomorrow's close.
     # No database or API secrets needed: data lives in data/ and models/,
     # both committed straight back to the repo below.
     - name: Run Daily Job
@@ -40,13 +42,13 @@ jobs:
       run: |
         python -m src.automation
 
-    # 5. Commit the refreshed data/predictions back to the repo.
+    # 5. Commit the refreshed data/models/predictions back to the repo.
     # The Streamlit Community Cloud app auto-redeploys on every push to this
     # branch, so this push is what makes the dashboard show today's numbers.
-    - name: Commit updated data
+    - name: Commit updated data and models
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add data/
-        git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%F)"
+        git add data/ models/
+        git diff --cached --quiet || git commit -m "chore: daily retrain + forecast $(date -u +%F)"
         git push
