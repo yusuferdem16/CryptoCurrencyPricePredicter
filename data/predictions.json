@@ -1085,9 +1085,9 @@
     "model_version": "LSTM_BiDir_v4",
     "predicted_date": "2026-11-06",
     "predicted_price": 75782.6713634568,
-    "actual_price": null,
-    "mae": null,
-    "mape": null
+    "actual_price": 75850.43860264524,
+    "mae": 67.76723918844073,
+    "mape": 0.08934323971869212
   },
   {
     "timestamp": "2026-11-06T12:35:03.525333",
@@ -1095,6 +1095,26 @@
     "model_version": "SARIMAX_v1",
     "predicted_date": "2026-11-06",
     "predicted_price": 75777.25268519203,
+    "actual_price": 75850.43860264524,
+    "mae": 73.18591745321464,
+    "mape": 0.09648713811216159
+  },
+  {
+    "timestamp": "2026-11-07T11:24:00.789321",
+    "ticker": "BTC-USD",
+    "model_version": "LSTM_BiDir_v4",
+    "predicted_date": "2026-11-07",
+    "predicted_price": 75938.49938955424,
+    "actual_price": null,
+    "mae": null,
+    "mape": null
+  },
+  {
+    "timestamp": "2026-11-07T11:24:00.789321",
+    "ticker": "BTC-USD",
+    "model_version": "SARIMAX_v1",
+    "predicted_date": "2026-11-07",
+    "predicted_price": 75759.1542333999,
     "actual_price": null,
     "mae": null,
     "mape": null
